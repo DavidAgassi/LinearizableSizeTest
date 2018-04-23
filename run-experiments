@@ -1,0 +1,76 @@
+#!/bin/bash
+
+######## ENTER PATH TO YOUR JAVA BINARY HERE
+java="java"
+
+threadcounts="1 2 4 8 16 32"
+trials=8
+sec=10
+
+cd build
+opts="-server -d64 -Xms3G -Xmx3G -Xbootclasspath/p:'../lib/scala-library.jar:../lib/deuceAgent.jar:..'"
+command="$java $opts -jar experiments_instr.jar"
+
+dt=`date`
+echo $dt
+echo $dt > run.log
+
+## LOOP THROUGH ALL EXPERIMENTS TWICE; THE FIRST TIME COUNTING THEM, AND THE SECOND TIME PERFORMING THEM
+for counting in 0 1
+do
+    i=0
+
+    if [ "$counting" -eq "0" ]
+    then 
+        echo "Counting experiments..."
+    else
+        printf "\n"
+        st=$SECONDS
+    fi
+
+    ## ALL EXPERIMENTS FOR NON-STM DATA STRUCTURES
+    for keysratio in 100_20_10_20 100_33_33_34 100_45_45_10 10000_33_33_34 10000_20_10_20 10000_45_45_10 1000000_33_33_34 1000000_20_10_20 1000000_45_45_10
+    do
+        for threads in $threadcounts
+        do
+            ##for algs in RBLock_ SkipList_ AVL_ SkipTree_ Chromatic_0 Chromatic_6
+            for algs in  SkipList_ SemiSizableSkipList_ SizableSkipList_ LockFreeAVL_ SemiSizableLFAVL_ SizableLFAVL_ ConcurrentHMAP_ SemiSizableHMAP_ SizableHMAP_
+            do
+                alg=`echo $algs | cut -f1 -d"_"`
+                param=`echo $algs | cut -f2 -d"_"`
+                keys=`echo $keysratio | cut -f1 -d"_"`
+                ins=`echo $keysratio | cut -f2 -d"_"`
+                del=`echo $keysratio | cut -f3 -d"_"`
+                size=`echo $keysratio | cut -f4 -d"_"`
+                i=`expr $i + 1`
+
+                if [ "$counting" -eq "0" ]; then echo "$i"; continue; fi
+
+                if [ "$param" != "" ]; then
+                    param="-param-$param"
+                else
+                    param=""
+                fi
+
+                args="$threads $trials $sec $alg $param -ins$ins -del$del -size$size -keys$keys -prefill -file-data-trials$i-$alg-$threads-$keysratio.csv"
+                echo -n "ex$i: "
+                echo "$command $args"
+                $command $args
+                top -n 1 > top-trials$i.log
+
+                elapsed=`expr $SECONDS - $st`
+                avg=`expr $elapsed / $i + 1`
+                expleft=`expr $maxi - $i`
+                secleft=`expr $expleft \* $avg`
+                msg="  after ${elapsed}s, $i finished (${avg}s each) and $expleft remaining (expected ${secleft}s)"
+                echo $msg
+                echo $msg >> run.log
+            done
+        done
+    done
+maxi=$i
+done
+
+dt=`date`
+echo $dt
+echo $dt >> run.log
